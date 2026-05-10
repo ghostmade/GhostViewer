@@ -1,4 +1,4 @@
-# GhostViewer — Privacy Policy
+# GhostViewer | Privacy Policy
 
 **Last updated:** 2026-05-09
 
@@ -61,29 +61,29 @@ or to check live status for notifications you opted in to.
 
 ### Twitch (when watching a Twitch channel)
 
-- `https://gql.twitch.tv/gql` — Twitch's public GraphQL endpoint. Used to fetch the stream playback access token, viewer count, and live status. Same calls the official Twitch web player makes.
-- `https://usher.ttvnw.net/api/channel/hls/<channel>.m3u8` — Twitch's HLS playlist server. Returns the stream manifest.
-- `https://*.live-video.net/...` — Twitch's video CDN. Serves the actual video segments to your browser.
-- `https://static-cdn.jtvnw.net/emoticons/...` — Twitch native emote images.
-- `wss://irc-ws.chat.twitch.tv` — Anonymous read-only connection to Twitch chat (using the standard `justinfan` guest username pattern; no account, no login, no posting).
+- `https://gql.twitch.tv/gql`: Twitch's public GraphQL endpoint. Used to fetch the stream playback access token, viewer count, and live status. Same calls the official Twitch web player makes.
+- `https://usher.ttvnw.net/api/channel/hls/<channel>.m3u8`: Twitch's HLS playlist server. Returns the stream manifest.
+- `https://*.live-video.net/...`: Twitch's video CDN. Serves the actual video segments to your browser.
+- `https://static-cdn.jtvnw.net/emoticons/...`: Twitch native emote images.
+- `wss://irc-ws.chat.twitch.tv`: Anonymous read-only connection to Twitch chat (using the standard `justinfan` guest username pattern; no account, no login, no posting).
 
 ### Kick (when watching a Kick channel)
 
-- `https://kick.com/api/v2/channels/<channel>` — Kick's public channel API. Returns playback URL, viewer count, chatroom ID, live status.
-- `https://kick.com/api/v1/video/<id>` — Kick's public VOD API.
-- `https://files.kick.com/emotes/...` — Kick native emote images.
-- `wss://ws-us2.pusher.com` — Kick's public Pusher channel for chat messages.
+- `https://kick.com/api/v2/channels/<channel>`: Kick's public channel API. Returns playback URL, viewer count, chatroom ID, live status.
+- `https://kick.com/api/v1/video/<id>`: Kick's public VOD API.
+- `https://files.kick.com/emotes/...`: Kick native emote images.
+- `wss://ws-us2.pusher.com`: Kick's public Pusher channel for chat messages.
 
 ### 7TV (third-party emote service, used for both platforms)
 
-- `https://7tv.io/v3/...` — Public emote metadata API.
-- `https://cdn.7tv.app/emote/...` — Emote images.
+- `https://7tv.io/v3/...`: Public emote metadata API.
+- `https://cdn.7tv.app/emote/...`: Emote images.
 
 ### What is in these requests
 
 Each request contains only:
 
-- The URL (channel name, video ID, etc. — required for the request to function).
+- The URL (channel name, video ID, etc., required for the request to function).
 - Standard HTTP headers a browser normally sends (User-Agent, Accept, etc.).
 - For Twitch CDN requests, the extension also sets the `Referer` header to `https://www.twitch.tv/` so the CDN serves the manifest, exactly as the official Twitch player does.
 
@@ -96,7 +96,7 @@ No identifying information about you is added to any request. The extension does
 - Does **not** read or modify any other web page on your machine.
 - Does **not** send your channel list, settings, or activity to any server.
 - Does **not** use cookies for tracking purposes.
-- Does **not** include any third-party analytics SDK (Google Analytics, Sentry, Mixpanel, etc. — none of these are present).
+- Does **not** include any third-party analytics SDK (Google Analytics, Sentry, Mixpanel, etc.). None of these are present.
 - Does **not** show ads.
 - Does **not** require an account.
 - Does **not** collect personally identifiable information.

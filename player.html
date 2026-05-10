@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Defense-in-depth CSP. MV3 already blocks inline scripts via the default
+    extension-pages CSP; this additionally bounds where chat-injected <img>
+    / <video> / fetch() can talk to, so a bypass of the chat HTML escape
+    can't exfil to an arbitrary host.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+                 img-src 'self' https: data:;
+                 media-src 'self' https: blob:;
+                 connect-src 'self' https: wss:;
+                 style-src 'self' 'unsafe-inline';
+                 script-src 'self';
+                 worker-src 'self' blob:;
+                 object-src 'none';
+                 base-uri 'none';">
+  <title>GhostViewer 👻</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0e0e10;
+      --surface:   #18181b;
+      --surface2:  #1f1f23;
+      --border:    #2a2a2e;
+      --border2:   #3a3a3d;
+      --text:      #efeff1;
+      --text-muted:#adadb8;
+      --text-dim:  #7c7c85;
+      --purple:    #bf94ff;
+      --purple-dk: #a970ff;
+      --green:     #53fc18;
+      --red:       #eb0400;
+      --chat-w:    320px;
+      --chat-fs:   12px;
+      /* Monospaced font stack for technical readouts (stats panel values,
+         chat timestamps) — improves scan-ability per 2026 raw-aesthetic
+         guidance, without making the whole UI mono. */
+      --mono: ui-monospace, "JetBrains Mono", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+    }
+
+    /* Honour the user's OS-level "reduce motion" preference. */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* Visible keyboard-focus rings — only shown for keyboard navigation
+       (not mouse clicks) thanks to :focus-visible. */
+    button:focus, input:focus, select:focus, a:focus { outline: none; }
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--purple);
+      outline-offset: 2px;
+      border-radius: 3px;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #app {
+      display: grid;
+      grid-template-rows: 40px 1fr 36px;
+      height: 100vh;
+    }
+
+    /* ════════════════ TOP BAR ════════════════ */
+    #topbar {
+      grid-row: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      z-index: 10;
+    }
+    #ghost-link {
+      font-size: 18px;
+      text-decoration: none;
+      display: inline-block;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    #ghost-link:hover { transform: scale(1.2) rotate(-10deg); }
+
+    #channel-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    #platform-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-decoration: none;
+      flex-shrink: 0;
+      transition: opacity 0.15s;
+    }
+    #platform-badge:hover { opacity: 0.75; }
+    #platform-badge.twitch { background: #6441a5; color: #fff; }
+    #platform-badge.kick   { background: var(--green); color: #000; }
+
+    #live-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #f00;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+      display: none;
+    }
+    #live-dot.visible { display: block; }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(255,0,0,0.5); }
+      70%  { box-shadow: 0 0 0 6px rgba(255,0,0,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,0,0,0); }
+    }
+    /* Negative margin offsets the topbar's flex `gap: 10px` so the live dot
+       sits visually next to "Live"/"Na żywo" rather than 12px away from it. */
+    #status-text { font-size: 11px; color: var(--text-muted); margin-left: -6px; }
+    .topbar-spacer { flex: 1; }
+    #ghost-note {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-left: 4px;
+    }
+
+    /* ════════════════ MAIN ════════════════ */
+    #main { grid-row: 2; display: flex; overflow: hidden; }
+
+    #video-side {
+      flex: 1;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+    }
+    #stream { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #video-side.cover #stream { object-fit: cover; }
+
+    /* overlay */
+    #overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px;
+      background: rgba(0,0,0,0.75);
+    }
+    #overlay.hidden { display: none; }
+    #overlay-ghost { font-size: 48px; }
+    #overlay-msg { font-size: 13px; color: var(--text-muted); text-align: center; max-width: 280px; line-height: 1.5; }
+    #retry-btn {
+      padding: 6px 18px; border-radius: 4px; border: none;
+      background: var(--purple); color: #0e0e10;
+      font-weight: 700; font-size: 12px; cursor: pointer; display: none;
+    }
+    #retry-btn:hover { background: var(--purple-dk); }
+
+    /* stats overlay */
+    #stats-panel {
+      position: absolute; top: 8px; left: 8px;
+      background: rgba(0,0,0,0.72);
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.8;
+      display: none;
+      pointer-events: none;
+      z-index: 5;
+      min-width: 160px;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+    }
+    #stats-panel.visible { display: block; }
+    /* Labels stay in the regular UI font; only values are mono. */
+    #stats-panel b { color: var(--text); font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+
+    /* ════════════════ CHAT ════════════════ */
+    #chat-side {
+      width: var(--chat-w);
+      min-width: var(--chat-w);
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+    #chat-side.collapsed { display: none; }
+
+    #chat-header {
+      display: flex; align-items: center;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0; gap: 4px;
+    }
+    #chat-title {
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+    #chat-viewer-count { font-size: 10px; color: var(--text-dim); margin-left: 6px; }
+    #chat-header-right { display: flex; align-items: center; gap: 3px; margin-left: auto; flex-shrink: 0; }
+
+    /* timestamp toggle */
+    #btn-timestamps {
+      background: var(--surface2); border: 1px solid var(--border2);
+      color: var(--text-dim); border-radius: 3px;
+      font-size: 9px; font-weight: 700; padding: 1px 5px; height: 18px;
+      cursor: pointer; white-space: nowrap; letter-spacing: 0.03em;
+      transition: color 0.12s, border-color 0.12s;
+    }
+    #btn-timestamps:hover { color: var(--text); border-color: var(--purple); }
+    #btn-timestamps.active { color: var(--purple); border-color: var(--purple); }
+
+    /* font buttons */
+    .font-btn {
+      background: var(--surface2); border: 1px solid var(--border2);
+      color: var(--text-muted); border-radius: 3px;
+      width: 18px; height: 18px; font-size: 13px; line-height: 1;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; padding: 0;
+      transition: color 0.12s, border-color 0.12s;
+    }
+    .font-btn:hover { color: var(--text); border-color: var(--purple); }
+    #chat-font-size-label { font-size: 10px; color: var(--text-dim); min-width: 24px; text-align: center; }
+
+    #chat-messages {
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: 6px 4px; display: flex; flex-direction: column;
+      gap: 1px; scroll-behavior: smooth;
+    }
+    #chat-messages::-webkit-scrollbar { width: 4px; }
+    #chat-messages::-webkit-scrollbar-track { background: transparent; }
+    #chat-messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    .chat-msg {
+      padding: 2px 8px;
+      font-size: var(--chat-fs);
+      line-height: 1.5; border-radius: 3px; word-break: break-word;
+    }
+    .chat-msg:hover { background: rgba(255,255,255,0.04); }
+    .chat-msg .username { font-weight: 700; cursor: default; }
+    .chat-msg .msg-text { color: var(--text); }
+    .chat-msg .ts { color: var(--text-dim); font-size: 0.85em; margin-right: 4px; user-select: none; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+    .chat-notice {
+      padding: 4px 8px;
+      font-size: calc(var(--chat-fs) - 1px);
+      color: var(--text-muted);
+      background: rgba(191,148,255,0.08);
+      border-left: 2px solid var(--purple);
+      border-radius: 0 3px 3px 0;
+      margin: 2px 0; line-height: 1.4;
+    }
+
+    #chat-status { padding: 8px; font-size: 11px; color: var(--text-dim); text-align: center; flex-shrink: 0; }
+
+    #scroll-to-bottom {
+      display: none; margin: 4px 8px; padding: 4px;
+      font-size: 10px; background: var(--surface2);
+      border: 1px solid var(--border2); color: var(--text-muted);
+      border-radius: 4px; cursor: pointer; text-align: center; flex-shrink: 0;
+    }
+    #scroll-to-bottom:hover { background: var(--border2); }
+    #scroll-to-bottom.visible { display: block; }
+
+    /* drag handle */
+    #chat-resize-handle {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: 5px; cursor: col-resize; z-index: 20;
+      background: transparent; transition: background 0.15s;
+    }
+    #chat-resize-handle:hover,
+    #chat-resize-handle.dragging { background: var(--purple); opacity: 0.5; }
+
+    /* ════════════════ CONTROLS BAR ════════════════ */
+    #controls {
+      grid-row: 3;
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px; padding: 0 10px;
+      background: var(--surface); border-top: 1px solid var(--border);
+      z-index: 10;
+      transition: opacity 0.3s;
+      position: relative;   /* anchors the absolutely-positioned Ko-fi button */
+    }
+
+    .ctrl-sep { width: 1px; height: 16px; background: var(--border2); flex-shrink: 0; }
+
+    .ctrl-btn {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 4px;
+      border: 1px solid transparent; background: transparent;
+      color: var(--text-muted); font-size: 11px;
+      cursor: pointer; white-space: nowrap;
+      transition: color 0.12s, border-color 0.12s, background 0.12s;
+      flex-shrink: 0;
+    }
+    .ctrl-btn:hover { color: var(--text); border-color: var(--border2); background: var(--surface2); }
+    .ctrl-btn.active { color: var(--purple); border-color: var(--purple); }
+    .ctrl-btn svg { flex-shrink: 0; }
+
+    /* Subtle Ko-fi support button pinned to the far right of the controls
+       bar (absolute, not part of the centered flex group). Dimmed by default
+       so it doesn't compete; lifts on hover. Hidden in fullscreen. */
+    #btn-kofi {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 14px;
+      line-height: 1;
+      padding: 3px 8px;
+      text-decoration: none;
+      color: var(--text-dim);
+      opacity: 0.65;
+      transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    #btn-kofi:hover { opacity: 1; color: var(--text); border-color: var(--border2); background: var(--surface2); }
+    body.in-fullscreen .ctrl-fs-hide { display: none; }
+
+    /* Toggle buttons keep a fixed width equal to the LONGEST text variant in
+       the CURRENT locale. JS measures the actual rendered text width at init
+       and writes the result into the --label-w-* custom properties below.
+       Defaults are PL-sized fallbacks in case JS hasn't run yet. */
+    .ctrl-btn { justify-content: center; }
+    #play-label    { display: inline-block; width: var(--label-w-play,    50px); text-align: center; }
+    #mute-label    { display: inline-block; width: var(--label-w-mute,    46px); text-align: center; }
+    #fit-label     { display: inline-block; width: var(--label-w-fit,     58px); text-align: center; }
+    #fs-label      { display: inline-block; width: var(--label-w-fs,    108px); text-align: center; }
+    #refresh-label { display: inline-block; width: var(--label-w-refresh, 52px); text-align: center; }
+
+    /* volume slider */
+    #volume-wrap { display: flex; align-items: center; flex-shrink: 0; position: relative; }
+    #volume-tooltip {
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(20, 20, 24, 0.96);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-family: var(--mono);
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+      z-index: 20;
+    }
+    #volume-wrap:hover #volume-tooltip,
+    #volume-tooltip.dragging { opacity: 1; }
+    #volume-slider {
+      -webkit-appearance: none; appearance: none;
+      width: 72px; height: 3px;
+      background: var(--border2); border-radius: 2px;
+      outline: none; cursor: pointer; accent-color: var(--purple);
+    }
+    #volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--purple); cursor: pointer;
+      transition: transform 0.12s;
+    }
+    #volume-slider::-webkit-slider-thumb:hover { transform: scale(1.25); }
+    #volume-slider::-moz-range-thumb {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--purple); cursor: pointer; border: none;
+    }
+
+    /* quality select */
+    #quality-wrap { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+    #quality-select {
+      background: var(--surface2); border: 1px solid var(--border2);
+      color: var(--text); font-size: 11px; padding: 2px 5px;
+      border-radius: 3px; cursor: pointer;
+    }
+    #quality-select:focus { outline: none; border-color: var(--purple); }
+
+    /* ════════════════ FULLSCREEN MODE ════════════════
+       Topbar and controls become FLOATING OVERLAYS that hover over the
+       video. They sit a safe distance from the screen edges so even if the
+       OS taskbar is configured "always on top" or there's any UA padding,
+       the buttons stay visible.
+
+       body.in-fullscreen is toggled by the JS fullscreenchange handler. */
+    #app:fullscreen { width: 100vw; height: 100vh; background: var(--bg); }
+
+    body.in-fullscreen #topbar {
+      position: fixed !important;
+      top: 14px !important;
+      left: 14px !important;
+      right: auto !important;
+      width: auto !important;
+      max-width: calc(100vw - 28px);
+      z-index: 2147483647;
+      background: rgba(14, 14, 16, 0.94);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 4px 12px;
+      transition: opacity 0.25s ease;
+    }
+
+    body.in-fullscreen #controls {
+      position: fixed !important;
+      bottom: 60px !important;          /* clear of any "always-on-top" OS taskbar */
+      left: 50% !important;
+      right: auto !important;
+      top: auto !important;
+      transform: translateX(-50%);
+      width: auto !important;
+      max-width: calc(100vw - 28px);
+      z-index: 2147483647;
+      background: rgba(14, 14, 16, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 6px 14px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      transition: opacity 0.25s ease;
+    }
+
+    /* Auto-hide via opacity only — bars stay positioned, never go off-screen. */
+    body.in-fullscreen.fs-idle #topbar,
+    body.in-fullscreen.fs-idle #controls {
+      opacity: 0;
+      pointer-events: none;
+    }
+    body.in-fullscreen.fs-idle { cursor: none; }
+
+    /* ════════════════ EMOTES ════════════════ */
+    .chat-emote {
+      display: inline-block; vertical-align: middle;
+      height: 2em; width: auto; max-width: 112px;
+      object-fit: contain; margin: 0 1px; cursor: pointer;
+      transition: transform 0.12s ease;
+    }
+    .chat-emote:hover { transform: scale(1.12); }
+    .emote-stack { display: inline-block; position: relative; vertical-align: middle; }
+    .emote-zero-width {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%); pointer-events: none;
+    }
+    .emote-zero-width .chat-emote { margin: 0; }
+
+    /* ════════════════ EMOTE HOVER TOOLTIP ════════════════ */
+    #emote-tooltip {
+      position: fixed;
+      background: rgba(20, 20, 24, 0.96);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 8px;
+      display: none;
+      z-index: 9999;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      max-width: 220px;
+    }
+    #emote-tooltip.visible { display: block; }
+    #emote-tooltip img {
+      display: block;
+      max-width: 96px; max-height: 96px;
+      width: auto; height: auto;
+      margin: 0 auto 6px;
+      object-fit: contain;
+    }
+    #emote-tooltip .et-name {
+      font-size: 12px; font-weight: 700;
+      color: var(--text); text-align: center;
+      word-break: break-all;
+    }
+    #emote-tooltip .et-source {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 2px;
+    }
+    #emote-tooltip .et-source.twitch { color: #bf94ff; }
+    #emote-tooltip .et-source.kick   { color: var(--green); }
+    #emote-tooltip .et-source.sevenTV { color: #29D; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <a id="ghost-link" href="https://ko-fi.com/ghostydev" target="_blank" rel="noopener noreferrer" data-i18n-title="ghostLinkTitle" title="Support GhostViewer on Ko-fi">👻</a>
+    <span id="channel-name" data-i18n="playerLoadingChannel">Loading...</span>
+    <a id="platform-badge" href="#" target="_blank" rel="noopener noreferrer"></a>
+    <div id="live-dot"></div>
+    <span id="status-text" data-i18n="playerStatusConnecting">Connecting...</span>
+    <div class="topbar-spacer"></div>
+    <span id="ghost-note" data-i18n="ghostNote">👻 Ghost Mode - not counted as a viewer</span>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+
+    <!-- Video -->
+    <div id="video-side">
+      <video id="stream" playsinline></video>
+
+      <!-- Loading/error overlay -->
+      <div id="overlay">
+        <div id="overlay-ghost">👻</div>
+        <div id="overlay-msg" data-i18n="playerStatusFetching">Fetching stream...</div>
+        <button id="retry-btn">Retry</button>
+      </div>
+
+      <!-- Stats panel -->
+      <div id="stats-panel">
+        <div><b data-i18n="statResolution">Resolution</b> <span id="stat-res">-</span></div>
+        <div><b data-i18n="statFps">FPS</b> <span id="stat-fps">-</span></div>
+        <div><b data-i18n="statBitrate">Bitrate</b> <span id="stat-bitrate">-</span></div>
+        <div><b data-i18n="statBuffer">Buffer</b> <span id="stat-buffer">-</span></div>
+        <div><b data-i18n="statDropped">Dropped</b> <span id="stat-dropped">-</span></div>
+        <div><b data-i18n="statLatency">Latency</b> <span id="stat-latency">-</span></div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div id="chat-side">
+      <div id="chat-resize-handle"></div>
+
+      <div id="chat-header">
+        <span id="chat-title" data-i18n="chatTitle">Chat</span>
+        <span id="chat-viewer-count"></span>
+        <div id="chat-header-right">
+          <button id="btn-timestamps" data-i18n-title="chatTimestampsTitle" title="Toggle timestamps">TS</button>
+          <button class="font-btn" id="btn-font-down" data-i18n-title="chatFontDownTitle" title="Decrease font size">−</button>
+          <span id="chat-font-size-label">12px</span>
+          <button class="font-btn" id="btn-font-up" data-i18n-title="chatFontUpTitle" title="Increase font size">+</button>
+        </div>
+      </div>
+
+      <div id="chat-messages"></div>
+      <div id="emote-tooltip" aria-hidden="true"></div>
+      <div id="scroll-to-bottom" data-i18n="chatScrollToBottom">↓ scroll to bottom</div>
+      <div id="chat-status" data-i18n="chatStatusConnecting">Connecting to chat...</div>
+    </div>
+
+  </div>
+
+  <!-- CONTROLS BAR -->
+  <div id="controls">
+
+    <button class="ctrl-btn" id="btn-play" data-i18n-title="ctrlPlayPauseTitle" title="Play / Pause">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path id="play-icon" d="M8 5v14l11-7z"/>
+      </svg>
+      <span id="play-label">Play</span>
+    </button>
+
+    <button class="ctrl-btn" id="btn-mute" data-i18n-title="ctrlMuteTitle" title="Mute / Unmute">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path id="mute-icon-path" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+      </svg>
+      <span id="mute-label">Mute</span>
+    </button>
+
+    <div id="volume-wrap">
+      <input type="range" id="volume-slider" min="0" max="100" value="100" data-i18n-title="ctrlVolumeTitle" title="Volume" step="1">
+      <div id="volume-tooltip" aria-hidden="true">100%</div>
+    </div>
+
+    <div class="ctrl-sep"></div>
+
+    <button class="ctrl-btn" id="btn-fit" data-i18n-title="ctrlFitTitle" title="Toggle fit / fill screen">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M21 3H3v18h18V3zm-2 16H5V5h14v14z"/>
+      </svg>
+      <span id="fit-label">Fit</span>
+    </button>
+
+    <button class="ctrl-btn" id="btn-pip" data-i18n-title="ctrlPipTitle" title="Picture-in-Picture">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16H3V4.98h18V19z"/>
+      </svg>
+      <span data-i18n="ctrlPip">PiP</span>
+    </button>
+
+    <button class="ctrl-btn" id="btn-stats" data-i18n-title="ctrlStatsTitle" title="Stream stats">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+      </svg>
+      <span data-i18n="ctrlStats">Stats</span>
+    </button>
+
+    <button class="ctrl-btn" id="btn-refresh" data-i18n-title="ctrlRefreshTitle" title="Refresh stream">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path id="refresh-icon" d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+      </svg>
+      <span id="refresh-label">Refresh</span>
+    </button>
+
+    <button class="ctrl-btn active" id="btn-chat" data-i18n-title="ctrlChatTitle" title="Toggle chat">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+      </svg>
+      <span data-i18n="ctrlChat">Chat</span>
+    </button>
+
+    <div class="ctrl-sep"></div>
+
+    <div id="quality-wrap">
+      <label for="quality-select" data-i18n="ctrlQuality">Quality</label>
+      <select id="quality-select">
+        <option value="-1" data-i18n="ctrlQualityAuto">Auto</option>
+      </select>
+    </div>
+
+    <button class="ctrl-btn" id="btn-fs" data-i18n-title="ctrlFullscreenTitle" title="Fullscreen">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+        <path id="fs-icon" d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+      </svg>
+      <span id="fs-label">Fullscreen</span>
+    </button>
+
+    <a class="ctrl-btn ctrl-fs-hide" id="btn-kofi"
+       href="https://ko-fi.com/ghostydev"
+       target="_blank" rel="noopener noreferrer"
+       data-i18n-title="ghostLinkTitle" data-i18n-aria-label="ghostLinkTitle"
+       title="Support GhostViewer on Ko-fi" aria-label="Support GhostViewer on Ko-fi">
+      ☕
+    </a>
+
+  </div>
+</div>
+
+<script src="hls.min.js"></script>
+<script src="i18n.js"></script>
+<script src="player.js"></script>
+</body>
+</html>

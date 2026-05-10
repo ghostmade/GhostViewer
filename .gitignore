@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Claude / agent workspace — never publish these
+.claude/
+claude.md
+sessionlogs/
+
+# Design backup snapshots — keep locally, not part of source
+design-backup-*/
+
+# Chrome's auto-generated metadata (only present on installed extensions,
+# never on the source side)
+_metadata/
+
+# Build artifacts (zips go to ~/Downloads, never the repo)
+*.zip
+
+# Local working notes
+*.local.md
+NOTES.md

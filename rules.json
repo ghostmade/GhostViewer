@@ -1,0 +1,101 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "||spade.twitch.tv",
+      "resourceTypes": ["xmlhttprequest", "image", "ping"]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "||iadsdk.apple.com",
+      "resourceTypes": ["xmlhttprequest", "script"]
+    }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "||amazon-adsystem.com",
+      "resourceTypes": ["xmlhttprequest", "script", "image"]
+    }
+  },
+  {
+    "id": 4,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "||pubads.g.doubleclick.net",
+      "resourceTypes": ["xmlhttprequest", "script"]
+    }
+  },
+  {
+    "id": 5,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "||tracking.kick.com",
+      "resourceTypes": ["xmlhttprequest", "ping", "image"]
+    }
+  },
+  {
+    "id": 6,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "urlFilter": "||stats.kick.com",
+      "resourceTypes": ["xmlhttprequest", "ping", "image"]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 2,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Referer", "operation": "set", "value": "https://www.twitch.tv/" },
+        { "header": "Origin",  "operation": "set", "value": "https://www.twitch.tv"  }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||ttvnw.net",
+      "resourceTypes": ["xmlhttprequest", "media", "other"]
+    }
+  },
+  {
+    "id": 8,
+    "priority": 2,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Referer", "operation": "set", "value": "https://www.twitch.tv/" },
+        { "header": "Origin",  "operation": "set", "value": "https://www.twitch.tv"  }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||live-video.net",
+      "resourceTypes": ["xmlhttprequest", "media", "other"]
+    }
+  },
+  {
+    "id": 9,
+    "priority": 2,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Referer", "operation": "set", "value": "https://www.twitch.tv/" },
+        { "header": "Origin",  "operation": "set", "value": "https://www.twitch.tv"  }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||gql.twitch.tv",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  }
+]

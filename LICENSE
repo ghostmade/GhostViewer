@@ -1,0 +1,40 @@
+GhostViewer Proprietary License
+
+Copyright (c) 2026 ghostmade. All rights reserved.
+
+The source code in this repository is published for transparency and
+public review. Publication of the source code does not constitute a
+grant of any license to use, copy, modify, merge, publish, distribute,
+sublicense, sell, or create derivative works of the code, in whole or
+in part, except as expressly granted by the copyright holder in writing.
+
+Reading the source code, reporting issues, and submitting suggestions
+through the project's issue tracker are permitted and welcomed.
+
+The compiled extension is distributed to end users exclusively through
+the Chrome Web Store and Mozilla Add-ons (AMO). End-user installation
+and use of the published extension is governed by those distribution
+platforms' terms of service. No additional license is granted by this
+file to install, copy, or run the unpublished source code as a
+"developer install" outside of personal evaluation.
+
+Third-party components included in this repository remain governed by
+their own licenses. In particular:
+
+  * hls.min.js is a minified build of hls.js
+    (https://github.com/video-dev/hls.js), distributed under the
+    Apache License 2.0.
+
+The "GhostViewer" name and the ghost icon are trademarks of the
+copyright holder. They may not be used to identify, endorse, or
+promote derivative works without prior written permission.
+
+For inquiries about licensing, contact via:
+https://github.com/ghostmade/GhostViewer/issues
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM,
+DAMAGES, OR OTHER LIABILITY ARISING FROM THE USE OF, OR INABILITY TO
+USE, THE SOFTWARE.

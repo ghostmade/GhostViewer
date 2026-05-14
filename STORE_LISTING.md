@@ -39,7 +39,7 @@ What's private about it
   • No third-party SDKs (no Google Analytics, Sentry, Mixpanel, etc.).
   • The platform's tracking pixels (spade.twitch.tv, tracking.kick.com)
     are blocked by built-in declarativeNetRequest rules.
-  • Open source — every line of code is inspectable.
+  • Source-available on GitHub. Every line of code is inspectable.
 
 ──────────────────────────────────────────────────────────────────
 Features
@@ -99,10 +99,11 @@ Permissions explained
     stream manifests, chat, and emote metadata directly.
 
 ──────────────────────────────────────────────────────────────────
-Open source
+Source-available
 ──────────────────────────────────────────────────────────────────
 
-GhostViewer is open source. Source code: https://github.com/ghostmade/GhostViewer
+The full source code is published for review and inspection.
+Source code: https://github.com/ghostmade/GhostViewer
 Issues / feedback: https://github.com/ghostmade/GhostViewer/issues
 
 ──────────────────────────────────────────────────────────────────
